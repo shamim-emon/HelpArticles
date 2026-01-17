@@ -1,51 +1,90 @@
 package com.shamim.helparticles.data.network
 
-import com.shamim.helparticles.data.network.ApiResult
+import com.shamim.cache.SimpleCache
 import com.shamim.helparticles.data.model.Article
 import com.shamim.helparticles.data.model.ArticleDetails
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import retrofit2.Response
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.lang.IllegalStateException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import kotlinx.serialization.SerializationException
-
+import java.text.SimpleDateFormat
+import java.util.Date
 
 
 class ArticleRepositoryImpl(
     private val apiService: ArticleApiService,
     private val simpleDateFormat: SimpleDateFormat,
     private val json: Json,
+    private val articlesCache: SimpleCache<String, List<Article>>,
+    private val articleDetailsCache: SimpleCache<String, ArticleDetails>,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ArticleRepository {
 
+    companion object {
+        const val ARTICLES_CACHE_KEY = "articles_cache_key"
+    }
 
-    override fun getArticles(): Flow<ApiResult<List<Article>>> =
-        makeRequest { apiService.getArticles() }
-            .map { result ->
-                if (result is ApiResult.Success) {
-                    result.copy(
-                        data = result.data.map {
-                            it.copy(formattedDate = simpleDateFormat.format(Date(it.updatedAt)))
+    override fun getArticles(): Flow<ApiResult<List<Article>>> = flow {
+        emit(ApiResult.Loading)
+        val cached = articlesCache.get(ARTICLES_CACHE_KEY)
+        if (cached != null) {
+            emit(ApiResult.Success(cached))
+            return@flow
+        }
+
+        emitAll(
+            makeRequest { apiService.getArticles() }
+                .map { result ->
+                    if (result is ApiResult.Success) {
+                        val formatted = result.data.map {
+                            it.copy(
+                                formattedDate = simpleDateFormat.format(Date(it.updatedAt))
+                            )
                         }
-                    )
-                } else result
-            }
+                        if(formatted.isNotEmpty()) {
+                            articlesCache.put(ARTICLES_CACHE_KEY, formatted)
+                        }
 
-    override fun getArticleDetails(id: Int): Flow<ApiResult<ArticleDetails>> =
-        makeRequest { apiService.getArticleDetails(id) }
+
+                        ApiResult.Success(formatted)
+                    } else result
+                }
+        )
+    }.flowOn(dispatcher)
+
+
+    override fun getArticleDetails(id: Int): Flow<ApiResult<ArticleDetails>> = flow {
+        emit(ApiResult.Loading)
+        val cacheKey = id.toString()
+
+        val cached = articleDetailsCache.get(cacheKey)
+        if (cached != null) {
+            emit(ApiResult.Success(cached))
+            return@flow
+        }
+
+        emitAll(
+            makeRequest { apiService.getArticleDetails(id) }
+                .map { result ->
+                    if (result is ApiResult.Success) {
+                        articleDetailsCache.put(cacheKey, result.data)
+                    }
+                    result
+                }
+        )
+    }.flowOn(dispatcher)
+
 
     private fun <T> makeRequest(apiCall: suspend () -> Response<T>): Flow<ApiResult<T>> = flow {
-        emit(ApiResult.Loading)
         val response = apiCall()
         if (response.isSuccessful) {
             response.body()?.let {
@@ -55,7 +94,6 @@ class ArticleRepositoryImpl(
             emit(ApiResult.Error(response.parseError() ?: ErrorResponse.UNEXPECTED_RESPONSE))
         }
     }.catch { emit(ApiResult.Error(handleThrowable(it))) }
-        .flowOn(dispatcher)
 
 
     private fun <T> Response<T>.parseError(): ErrorResponse? {

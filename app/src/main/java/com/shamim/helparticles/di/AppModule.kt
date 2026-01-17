@@ -2,8 +2,12 @@ package com.shamim.helparticles.di
 
 import android.content.Context
 import android.net.ConnectivityManager
+import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import com.shamim.cache.SimpleCache
 import com.shamim.helparticles.NetworkConnectivityChecker
 import com.shamim.helparticles.NetworkConnectivityCheckerImpl
+import com.shamim.helparticles.data.model.Article
+import com.shamim.helparticles.data.model.ArticleDetails
 import com.shamim.helparticles.data.network.ArticleApiService
 import com.shamim.helparticles.data.network.ArticleRepository
 import com.shamim.helparticles.data.network.ArticleRepositoryImpl
@@ -15,9 +19,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.inject.Singleton
@@ -26,6 +30,14 @@ import kotlin.random.Random
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    @Singleton
+    @Provides
+    fun provideArticlesCache(): SimpleCache<String, List<Article>> = SimpleCache(clock = { System.currentTimeMillis()})
+
+    @Singleton
+    @Provides
+    fun provideArticleDetailsCache(): SimpleCache<String, ArticleDetails> = SimpleCache(clock = { System.currentTimeMillis()})
     @Provides
     fun provideJson(): Json = Json {
         encodeDefaults = true
@@ -72,11 +84,14 @@ object AppModule {
 
     @Singleton
     @Provides
-    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit =
+    fun provideRetrofit(
+        okHttpClient: OkHttpClient,
+        json: Json,
+    ): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://fake.com/")
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
 
     @Singleton
@@ -97,11 +112,15 @@ object AppModule {
     @Singleton
     @Provides
     fun provideArticleRepository(
+        articlesCache: SimpleCache<String, List<Article>>,
+        articleDetailsCache: SimpleCache<String, ArticleDetails>,
         apiService: ArticleApiService,
         dateFormat: SimpleDateFormat,
         json: Json,
     ): ArticleRepository =
         ArticleRepositoryImpl(
+            articlesCache = articlesCache,
+            articleDetailsCache = articleDetailsCache,
             apiService = apiService,
             simpleDateFormat = dateFormat,
             json = json,
