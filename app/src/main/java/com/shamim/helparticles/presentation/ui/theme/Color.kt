@@ -1,4 +1,4 @@
-package com.shamim.helparticles.ui.theme
+package com.shamim.helparticles.presentation.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
