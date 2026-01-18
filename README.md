@@ -1,6 +1,7 @@
 # HelpArticles
 
-HelpArticles is an Android application built using the MVI (Model–View–Intent) architecture pattern and Jetpack Compose for declarative UI. It uses Hilt for dependency injection and a Kotlin Multiplatform (KMP) shared in-memory cache to provide offline support. The project demonstrates predictable state management, explicit data refresh rules, and robust error handling, all without relying on a traditional database.
+HelpArticles is an Android application built using the MVI (Model–View–Intent) architecture pattern and Jetpack Compose for declarative UI. It uses Hilt for dependency injection and a Kotlin Multiplatform (KMP)  ~~in-memory~~ file-based cache to provide offline support.
+ The project demonstrates predictable state management, explicit data refresh rules, and robust error handling, all without relying on a traditional database.
 
 ## Architecture & Key Decisions
 - **MVI Pattern**:
@@ -11,7 +12,7 @@ HelpArticles is an Android application built using the MVI (Model–View–Inten
 - **Hilt (Dependency Injection)**:
   - Manages creation and lifecycle of repositories, network clients, interceptors, and cache components.
   - Improves testability and enforces clear dependency boundaries.
-- **In Memory Cache**: Data persistence and offline support are handled exclusively via the KMP cache.
+- **~~In Memory Cache~~ File-based Cache**: Data persistence and offline support are handled exclusively via the KMP cache. the cache is highly configurable and storage method can changed with ease (Ex: Any moment if api response significantly grows and file system seems inefficient, storage can be switched to sqldelight or any other local database.)
 - **Mocked API using OkHttp Interceptor**:
   - API responses are mocked at the network layer using a custom OkHttp interceptor.
   - This allows realistic networking behavior without a real backend.
@@ -37,7 +38,7 @@ WorkManager is used to run scheduled prefetch in the background because:
 ## Staleness / Expiry & KMP Cache
 - **Staleness rule**: Cached articles older than **24 hours** are considered stale and eligible for refresh.
 - **KMP cache**:
-  - Caches articles and their metadata in memory with TTL/staleness logic.
+  - Caches articles and their metadata  is cached in  File Storage and maintain TTL/staleness logic (initially this was in memory cache, but since using background prefetching, it only makes sense to persist cache across app restart).
   - Enables offline access and controlled refresh behavior.
   - Avoids redundant network calls while keeping the UI responsive.
 
@@ -47,5 +48,5 @@ WorkManager is used to run scheduled prefetch in the background because:
 ## Mock-Interceptor VS TestStub-Interceptor
 - **Mock-Interceptor**: Can configure response probablity. Able to handle various types of Error.
 
-- **Stub-Interceptor**: Alternative to Mock-Interceptor. Can be used to set responses dynamically.
+- **Stub-Interceptor**: Replaces Mock-Interceptor in UI Test to stub response as per test scenario.
  
