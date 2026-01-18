@@ -3,6 +3,7 @@ package com.shamim.cache
 import kotlin.time.Duration
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.hours
 
 interface Cache<K, V> {
@@ -13,20 +14,22 @@ interface Cache<K, V> {
     suspend fun clear()
 }
 
+
+
 class SimpleCache<K, V>(
     private val ttl: Duration = 24.hours,
+    private val storage:  Storage<K, CacheItem<V>>,
     private val clock: () -> Long) : Cache<K, V> {
 
-    private val storage = mutableMapOf<K, CacheItem<V>>()
     private val mutex = Mutex()
 
     override suspend fun put(key: K, value: V) = mutex.withLock {
-        storage[key] = CacheItem(value, clock())
+        storage.put(key, CacheItem(value, clock()))
     }
 
     override suspend fun get(key: K): V? = mutex.withLock {
         val now = clock()
-        val item = storage[key] ?: return null
+        val item = storage.get(key)?: return null
 
         return if (item.isExpired(now)) {
             storage.remove(key)
@@ -37,7 +40,7 @@ class SimpleCache<K, V>(
     }
 
     override suspend fun isStale(key: K): Boolean = mutex.withLock {
-        val item = storage[key] ?: return true
+        val item = storage.get(key) ?: return true
         item.isExpired(clock())
     }
 
@@ -52,5 +55,7 @@ class SimpleCache<K, V>(
     private fun CacheItem<V>.isExpired(now: Long): Boolean =
         now - timestamp > ttl.inWholeMilliseconds
 
-    private data class CacheItem<V>(val value: V, val timestamp: Long)
 }
+
+@Serializable
+data class CacheItem<V>(val value: V, val timestamp: Long)

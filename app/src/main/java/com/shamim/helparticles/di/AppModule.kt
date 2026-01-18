@@ -3,7 +3,10 @@ package com.shamim.helparticles.di
 import android.content.Context
 import android.net.ConnectivityManager
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import com.shamim.cache.CacheItem
+import com.shamim.cache.FileStorage
 import com.shamim.cache.SimpleCache
+import com.shamim.cache.Storage
 import com.shamim.helparticles.NetworkConnectivityChecker
 import com.shamim.helparticles.NetworkConnectivityCheckerImpl
 import com.shamim.helparticles.data.model.Article
@@ -17,6 +20,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -31,13 +35,45 @@ import kotlin.random.Random
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    @Singleton
     @Provides
-    fun provideArticlesCache(): SimpleCache<String, List<Article>> = SimpleCache(clock = { System.currentTimeMillis()})
+    @Singleton
+    fun providesArticlesFileStorage(
+        @ApplicationContext context: Context,
+        json: Json
+    ): Storage<String, CacheItem<List<Article>>> =
+        FileStorage(
+            context = context, serializer = CacheItem.serializer(
+                ListSerializer(Article.serializer())
+            ), json = json
+        )
+
+    @Provides
+    @Singleton
+    fun providesArticleDetailsFileStorage(
+        @ApplicationContext context: Context,
+        json: Json
+    ): Storage<String, CacheItem<ArticleDetails>> = FileStorage(
+        context = context, serializer = CacheItem.serializer(
+            ArticleDetails.serializer()
+        ), json = json
+    )
 
     @Singleton
     @Provides
-    fun provideArticleDetailsCache(): SimpleCache<String, ArticleDetails> = SimpleCache(clock = { System.currentTimeMillis()})
+    fun provideArticlesCache(storage: Storage<String, CacheItem<List<Article>>>): SimpleCache<String, List<Article>> =
+        SimpleCache(
+            storage = storage,
+            clock = { System.currentTimeMillis() }
+        )
+
+    @Singleton
+    @Provides
+    fun provideArticleDetailsCache(storage: Storage<String, CacheItem<ArticleDetails>>): SimpleCache<String, ArticleDetails> =
+        SimpleCache(
+            storage = storage,
+            clock = { System.currentTimeMillis() }
+        )
+
     @Provides
     fun provideJson(): Json = Json {
         encodeDefaults = true
@@ -125,5 +161,4 @@ object AppModule {
             simpleDateFormat = dateFormat,
             json = json,
         )
-
 }
